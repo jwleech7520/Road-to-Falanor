@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <math.h>
+#include <windows.h>
 
 typedef struct weapon{
   char* name;
@@ -86,6 +87,29 @@ Creature goblinTemplate = {
   .capacity = 50,
 };
 
+item testItem = {
+  .name = "test item",
+  .value = 10,
+  .weight = 5.0,
+  .strengthbuff = 200,
+};
+
+item ringofstrength = {
+  .name = "ring of strength",
+  .value = 100,
+  .weight = 1.0,
+  .strengthbuff = 10,
+};
+
+void printStats(const Creature *c);
+void printInventory(Creature *c);
+void adjustStats(Creature *c, item *it, int equip);
+int equipItem(Creature *c, item *newItem);
+void unequipItem(Creature *c, int slot);
+int combat(Creature *player, Creature *enemy);
+int generateEncounter(int level, Creature *player);
+double calculate_damage(const Creature *attacker, const Creature *defender);
+
 void equip_weapon(Creature *c, const weapon *w) {
     c->weapon = *w;
 }
@@ -102,7 +126,7 @@ int main(void) {
     printf("| $$  \\ $$| $$  | $$ /$$__  $$| $$  | $$        | $$ /$$| $$  | $$      | $$   /$$__  $$| $$ /$$__  $$| $$  | $$| $$  | $$| $$\n");
     printf("| $$  | $$|  $$$$$$/|  $$$$$$$|  $$$$$$$        |  $$$$/|  $$$$$$/      | $$  |  $$$$$$$| $$|  $$$$$$$| $$  | $$|  $$$$$$/| $$\n");
     printf("|__/  |__/ \\______/  \\_______/ \\_______/         \\___/   \\______/       |__/   \\_______/|__/ \\_______/|__/  |__/ \\______/ |__/\n");
-    printf("______________________________________________________________________________________________________________________________________\n\n");
+    printf("______________________________________________________________________________________________________________________________________\n");
 
     // Opening monologue
     printf("A great evil has swept across the land. The Black Emperor's dark legions are pillaging and ransacking their way through our great nation.\n");
@@ -120,72 +144,107 @@ int main(void) {
         return 0;
     }
 
-    // Tutorial and shit
-
-    //start of the actual game
-    
     Creature player = playerTemplate;
-
     equip_weapon(&player, &bronzeDagger);
 
-    //game loop
+    int level = 1;   // better to start at level 1
 
-    int level;
+    // Test sequence
+    printf("\nInitial stats:\n");
+    printStats(&player);
 
-    while(level < 48){
-      if(generateEncounter(level, player) == -1){
-        printf("Game Over!\n");
-        return 0;
-      }
+    equipItem(&player, &testItem);       // STR += 200
+    printInventory(&player);
 
+    unequipItem(&player, 1);             // STR -= 200
+    printInventory(&player);
 
+    // Game loop
+    while (level < 48) {
+        printf("\n--- Level %d ---\n", level);
+        printStats(&player);   // optional: always show stats before encounter
 
-      level++;
+        printf("When ready: 'n' = next, 'i' = inventory, 'q' = quit\n> ");
+        char input;
+        while (1) {
+            scanf(" %c", &input);
+            input = tolower(input);
+
+            if (input == 'n') {
+                printf("Continuing...\n");
+                break;
+            } else if (input == 'i') {
+                printInventory(&player);
+                printStats(&player);
+            } else if (input == 'q') {
+                printf("Quit game.\n");
+                return 0;
+            } else {
+                printf("Invalid. Try again: ");
+            }
+        }
+
+        if (generateEncounter(level, &player) == 0) {   // ← changed to == 0 (loss)
+            printf("Game Over!\n");
+            return 0;
+        }
+
+        level++;
     }
-    
 
+    printf("You reached the end!\n");
     return 0;
 }
 
-int generateEncounter(int level, Creature player) {
-  int randomEncounter = rand() % 100 + 1; // Generate a random number between 1 and 100
-  if(randomEncounter <= 50){
+
+int generateEncounter(int level, Creature *player) {
+  int randomEncounter = rand() % 100 + 1;
+
+  if (randomEncounter <= 50) { // will be 50% or soemthing later but other interactions arent added yet
     printf("You encounter an enemy!\n");
-    printf("Do you try to fight or sneak past? (f/s): ");
+    printf("Fight or sneak? (f/s): ");
     char choice;
-    scanf(" %c", &choice);
-    if(choice == 'f') {
-      int difficulty = rand() % 10 + 1 + level; // Difficulty scales with level
-      if(difficulty < 10){
-        Creature enemy = goblinTemplate;
-        if(combat(&player, &enemy) == 1){
-          printf("You defeated the enemy!\n");
-        } else {
-          printf("You were defeated by the enemy...\n");
-          return -1; // player is dead
-        }
-      } else {
-        // other enemies when i add them
-      }
-    }else if(choice == 's') {
-      int sneakChance = rand() % 100 + 1;
-      if(sneakChance <= player.stealth) {
-        printf("You successfully sneak past the enemy!\n");
-      } else {
-        printf("You fail to sneak past the enemy and are forced to fight!\n");
-        Creature enemy = goblinTemplate;
-        enemy.weapon = goblinAttack;
-        combat(&player, &enemy);
+    while(1){
+      scanf(" %c", &choice);
+      choice = tolower(choice);
+      if(choice == 'f' || choice == 's'){
+        break;
+      }else{
+        printf("Invalid input. Please enter 'f' or 's': \n");
       }
     }
-  }else if(randomEncounter <= 80){
-    printf("You come across a village!\n"); 
-  }else if(randomEncounter <= 90){
-    printf("You meet a strange man who offers you a some mysterious liquid!\n");
-  }else if(randomEncounter <= 99){
-    printf("You find a chest on the side of the road!\n");
-  }else{
-    //some kind of secret or something
+    Creature enemy = goblinTemplate;
+    enemy.weapon = goblinAttack;   // ← always do this!
+
+    if (choice == 'f') {
+      int difficulty = rand() % 10 + 1 + level;
+      if (difficulty < 100) {  // temporary
+        return combat(player, &enemy);   // return 0=lose, 1=win
+      }
+    } else if (choice == 's') {
+      int sneakChance = rand() % 100 + 1;
+      if (sneakChance <= player->stealth) {
+        printf("You sneak past!\n");
+        return 1;  // success = continue
+      } else {
+        printf("Sneak failed: fight!\n");
+        return combat(player, &enemy);
+      }
+    }
+    return 1; // default continue if invalid choice
+  }else if(randomEncounter <= 100){ // change back to 80 when i add the shop and other interactions
+    printf("You find a treasure chest!\n");
+    int rarity = rand() % 10 + level;
+    if(rarity <= 50){
+      printf("You found a ring of strength!\n");
+      printf("would you like to equip it? (y/n): ");
+      char equipChoice;
+      scanf(" %c", &equipChoice);
+      if(tolower(equipChoice) == 'y'){
+        equipItem(player, &ringofstrength);
+      }  
+    }
+    return 1;  // non-combat = continue
   }
 }
 
@@ -205,32 +264,125 @@ double calculate_damage(const Creature *attacker, const Creature *defender) {
 }
 
 int combat(Creature *player, Creature *enemy) {
+  printf("\nCombat starts:  %s vs %s\n", player->name, enemy->name);
+
   while (player->health > 0 && enemy->health > 0) {
-    // Player's turn
-    if (player->health > 0) {
-        double dmg = calculate_damage(player, enemy);
-        if (rand() % 100 + 1 > enemy->dodge) {
-            enemy->health -= dmg;
-            printf("You hit for %.1f damage. Enemy HP: %.1f\n", dmg, enemy->health);
-        } else {
-            printf("Enemy dodged!\n");
-        }
-    }else{
-      return -1; // player is dead
+    Sleep(600);  // a bit longer feels better
+
+    // Player turn
+    double pdmg = calculate_damage(player, enemy);
+    if (rand() % 100 + 1 > enemy->dodge) {
+      enemy->health -= pdmg;
+      if (enemy->health < 0) enemy->health = 0;
+      printf("  You hit for %.1f -> %s HP: %.0f\n", pdmg, enemy->name, enemy->health);
+    } else {
+      printf("  %s dodges!\n", enemy->name);
     }
 
-    // Enemy's turn (if still alive)
-    if (enemy->health > 0 && player->health > 0) {
-        double dmg = calculate_damage(enemy, player);
-        if (rand() % 100 + 1 > player->dodge) {
-            player->health -= dmg;
-            printf("Enemy hits for %.1f damage. Your HP: %.1f\n", dmg, player->health);
-        } else {
-            printf("You dodged!\n");
-        }
-    }else{
-      printf("Enemy defeated!\n");
-      return 1; // enemy is dead
+    if (enemy->health <= 0) break;
+
+    // Enemy turny
+    double edmg = calculate_damage(enemy, player);
+    if (rand() % 100 + 1 > player->dodge) {
+      player->health -= edmg;
+      if (player->health < 0) player->health = 0;
+      printf("  %s hits for %.1f -> Your HP: %.0f\n", enemy->name, edmg, player->health);
+    } else {
+      printf("  You dodge!\n");
     }
   }
+
+  if (player->health <= 0) {
+    printf("You have been defeated...\n");
+    return 0;  // loss / game over
+  } else {
+    printf("You defeated the %s!\n", enemy->name);
+    return 1;  // victory
+  }
+}
+
+void printInventory(Creature *c) {
+    printf("\n=== Inventory ===\n");
+    for (int i = 0; i < 10; i++) {
+        if (c->inventory[i].name != NULL) {
+            printf("  %2d: %s (val:%d, wt:%.1f)\n",
+                   i+1, c->inventory[i].name,
+                   c->inventory[i].value, c->inventory[i].weight);
+        } else {
+            printf("  %2d: (empty)\n", i+1);
+        }
+    }
+    printf("=================\n");
+}
+
+void adjustStats(Creature *c, item *it, int addBuffs) {   // 1 = add, 0 = remove
+    int multiplier = addBuffs ? 1 : -1;
+    c->strength     += it->strengthbuff * multiplier;
+    c->strength += it->strengthbuff * multiplier;
+    c->intelligence += it->intelbuff * multiplier;
+    c->agility += it->agilitybuff * multiplier;
+    c->armour += it->armourbuff * multiplier;
+    c->dodge += it->dodgebuff * multiplier;
+    c->stealth += it->stealthbuff * multiplier;
+    c->speed += it->speedbuff * multiplier;
+}
+
+int equipItem(Creature *c, item *newItem) {
+    if (newItem == NULL || newItem->name == NULL) {
+        printf("Cannot equip: invalid item.\n");
+        return 0;
+    }
+
+    int slot = -1;
+    for (int i = 0; i < 10; i++) {
+        if (c->inventory[i].name == NULL) {
+            slot = i;
+            break;
+        }
+    }
+
+    if (slot == -1) {
+        printf("Inventory full! Cannot equip %s.\n", newItem->name);
+        return 0;
+    }
+
+    c->inventory[slot] = *newItem;
+    adjustStats(c, &c->inventory[slot], 1);
+
+    printf("Equipped %s (slot %d)\n", newItem->name, slot+1);
+    printStats(c);   // ← show effect immediately
+
+    return 1;
+}
+
+void unequipItem(Creature *c, int slot) {
+    if (slot < 1 || slot > 10) {
+        printf("Invalid slot (1-10).\n");
+        return;
+    }
+
+    int idx = slot - 1;
+    if (c->inventory[idx].name == NULL) {
+        printf("Slot %d is already empty.\n", slot);
+        return;
+    }
+
+    printf("Unequipping %s from slot %d...\n", c->inventory[idx].name, slot);
+
+    // Remove buffs (multiplier -1)
+    adjustStats(c, &c->inventory[idx], 0);
+
+    // Clear the slot completely
+    memset(&c->inventory[idx], 0, sizeof(item));
+    // or just: c->inventory[idx].name = NULL; but memset is cleaner
+
+    printStats(c);   // ← show what changed
+}
+void printStats(const Creature *c) {
+    printf("\nCurrent Stats:\n");
+    printf("  Health: %.0f / %.0f\n", c->health, c->maxHealth);
+    printf("  STR: %d   INT: %d   AGI: %d\n", c->strength, c->intelligence, c->agility);
+    printf("  Armour: %d   Dodge: %d   Stealth: %d   Speed: %d\n",
+           c->armour, c->dodge, c->stealth, c->speed);
+    printf("\n");
 }
